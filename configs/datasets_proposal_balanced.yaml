@@ -1,0 +1,65 @@
+output:
+  image_dir: data/images
+  manifest_dir: data/manifests
+  train_manifest: train_proposal_balanced.jsonl
+  eval_manifest: eval_proposal_balanced.jsonl
+  seed: 7
+
+datasets:
+  - name: vqav2
+    enabled: true
+    hf_id: landersanmi/VQAv2
+    adapter: vqa
+    train_split: train
+    eval_split: train
+    train_limit: 500
+    eval_limit: 150
+    task: vqa
+    columns:
+      image: image
+      question: question
+      answers: answers
+
+  - name: gqa
+    enabled: true
+    hf_id: vikhyatk/gqa
+    adapter: gqa_multiqa
+    train_split: train_balanced
+    eval_split: val_balanced
+    train_limit: 500
+    eval_limit: 150
+    task: reasoning
+    columns:
+      image: image
+      qa: qa
+      question: question
+      answers: answer
+
+  - name: textvqa
+    enabled: true
+    hf_id: fedlib/TextVQA-Data
+    adapter: vqa
+    train_split: train
+    eval_split: train
+    train_limit: 500
+    eval_limit: 150
+    task: ocr
+    columns:
+      image: image
+      question: conversations
+      answers: answers
+
+  - name: scienceqa_img
+    enabled: true
+    hf_id: GY2233/lmms-ScienceQA-IMG
+    adapter: scienceqa
+    train_split: train
+    eval_split: test
+    train_limit: 500
+    eval_limit: 150
+    task: reasoning
+    columns:
+      image: images
+      question: problem
+      choices: choices
+      answer: answer

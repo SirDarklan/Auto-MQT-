@@ -1,0 +1,54 @@
+# Secrets / local env
+.env
+.env.*
+!.env.example
+
+# Python cache / build artifacts
+__pycache__/
+*.py[cod]
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
+.tmp.driveupload/
+
+# Experiment outputs (large / generated)
+checkpoints/
+offload/
+results/*.jsonl
+results/smoke_*.csv
+
+# Dataset artifacts (very large)
+data/images/
+data/manifests/*.jsonl
+data/cache/
+data/raw/
+downloads/
+
+# Hugging Face / model cache folders (if created locally in repo)
+.cache/
+hf_cache/
+models/
+
+# External reference repo (clone separately)
+MQT-LLaVA-main/

@@ -1,0 +1,1 @@
+{"dataset": "textvqa", "split": "train", "example_id": "textvqa_train_142", "image": "data/images/textvqa/train/textvqa_train_142.jpg", "prompt": "what time is it currently?", "answer": "5:43 pm", "answers": ["5:43 pm", "5:35", "13", "5:43 p.m.", "5:35pm", "5:35 pm", "5:43"], "task": "ocr", "prediction":	", "visual_tokens": 36, "latency_s": 68.21447317399998, "exact_match": 0.0}

@@ -1,0 +1,37 @@
+--extra-index-url https://download.pytorch.org/whl/cu128
+
+# PyTorch (CUDA 12.8)
+torch
+torchvision
+torchaudio
+
+# Core project dependencies
+numpy>=1.26
+Pillow>=10.0
+PyYAML>=6.0.1
+datasets>=2.20.0
+pandas>=2.2.0
+
+# MQT-LLaVA / HF stack (mirrors current notebook setup)
+transformers==4.36.2
+tokenizers==0.15.1
+accelerate==0.21.0
+sentencepiece==0.2.1
+shortuuid>=1.0.11
+einops==0.6.1
+einops-exts==0.0.4
+timm==0.6.13
+protobuf>=4.25.0
+peft>=0.7.1
+safetensors>=0.4.0
+
+# Common experiment tooling (for analysis + notebook workflow)
+scikit-learn>=1.4.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+tqdm>=4.66.0
+jupyterlab>=4.2.0
+ipykernel>=6.29.0
+
+# Install the external MQT-LLaVA repo separately (path is machine-specific):
+# pip install -e /absolute/path/to/MQT-LLaVA --no-deps

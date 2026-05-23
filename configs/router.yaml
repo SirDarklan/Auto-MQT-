@@ -1,0 +1,41 @@
+budgets: [2, 4, 8, 16, 36, 64, 144, 256]
+prompt_dim: 512
+image_dim: 512
+hidden_dim: 256
+dropout: 0.1
+learning_rate: 0.001
+weight_decay: 0.0001
+batch_size: 64
+epochs: 20
+lambda_cost: 0.05
+cost_power: 1.0
+confidence_fallback_threshold: 0.55
+cross_attn_heads: 4
+cross_attn_query_tokens: 4
+cross_attn_layers: 1
+label_smoothing: 0.05
+focal_gamma: 1.0
+class_balance_mode: none
+class_balance_effective_beta: 0.999
+sampler_mode: none
+num_workers: 2
+grad_clip_norm: 1.0
+early_stop_patience: 6
+early_stop_min_delta: 0.0001
+fallback_threshold_grid: [0.0, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65]
+cost_bias_grid: [0.0, 0.05, 0.10, 0.15, 0.20, 0.30]
+threshold_score_weight: 1.0
+threshold_token_penalty: 0.04
+threshold_under_penalty: 0.10
+threshold_regret_penalty: 0.05
+soft_target_alpha: 0.35
+soft_target_temperature: 0.35
+soft_target_cost_weight: 0.20
+hard_label_alpha: 0.30
+lambda_utility: 1.0
+gamma_calibration: 0.05
+selection_metric: objective
+eval_score_weight: 1.0
+eval_token_penalty: 0.04
+eval_under_penalty: 0.10
+eval_regret_penalty: 0.05

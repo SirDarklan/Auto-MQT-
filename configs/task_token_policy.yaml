@@ -1,0 +1,38 @@
+default_budget: 64
+budgets:
+  caption: 32
+  vqa: 64
+  counting: 128
+  ocr: 256
+  detail: 128
+  reasoning: 128
+keyword_rules:
+  ocr:
+    - text
+    - word
+    - sign
+    - letter
+    - read
+    - written
+  counting:
+    - how many
+    - count
+    - number of
+  detail:
+    - color
+    - brand
+    - logo
+    - species
+    - type of
+    - fine-grained
+  reasoning:
+    - why
+    - before
+    - after
+    - because
+    - infer
+    - likely
+  caption:
+    - describe
+    - caption
+    - what is happening
