@@ -1,232 +1,155 @@
-# Auto-MQT Token Routing Starter
+# Token Routing Pipeline
 
-This scaffold implements the proposal workflow for Auto-MQT: generate oracle token-budget labels, train a small router, and compare adaptive routing against fixed-budget MQT-LLaVA baselines.
+This document describes the Auto-MQT routing workflow. The pipeline converts benchmark examples into a shared JSONL format, labels each example with an oracle visual-token budget, trains lightweight routers, and evaluates the accuracy-cost tradeoff against fixed-budget MQT-LLaVA baselines.
 
-## Data Format
-
-The project uses JSONL manifests as the canonical cache, even when the raw data comes from Hugging Face. Each row contains normalized fields:
-
-```json
-{"dataset": "textvqa", "split": "train", "example_id": "textvqa_train_12", "image": "data/images/textvqa/train/textvqa_train_12.jpg", "prompt": "what word is written on the sign?", "answer": "stop", "answers": ["stop"], "task": "ocr"}
-```
-
-The `task` field is optional. If omitted, the rule-based baseline in `src/task_token_policy.py` uses keyword rules from `configs/task_token_policy.yaml`.
-
-Router training expects oracle-labeled JSONL produced by `src/oracle_labeling.py`. For report-quality results, first add frozen prompt/image embeddings with `src/extract_router_features.py` (recommended). If embeddings are missing, training still runs with deterministic hashed fallback features so pipeline smoke tests can proceed.
-
-## Prepare Hugging Face Datasets
-
-Edit `configs/datasets.yaml` to choose dataset mirrors, splits, and subset sizes for VQAv2, GQA, TextVQA, and ScienceQA-IMG. Then create local cached manifests:
-
-```bash
-python3 src/prepare_datasets.py \
-  --config configs/datasets.yaml \
-  --train-limit 5 \
-  --eval-limit 5
-```
-
-This writes:
+The final experiments used four candidate budgets:
 
 ```text
-data/manifests/train.jsonl
-data/manifests/eval.jsonl
-data/images/
+36, 64, 144, 256
+```
+## Format 
+
+All datasets are converted into a common JSONL schema:
+
+```json
+{
+  "dataset": "vqav2",
+  "split": "validation",
+  "example_id": "vqav2_val_000001",
+  "image": "data/images/vqav2/validation/example.jpg",
+  "prompt": "What color is the bus?",
+  "answer": "yellow",
+  "answers": ["yellow"],
+  "task": "vqa"
+}
 ```
 
-Verify the manifests before running MQT-LLaVA:
+## Dataset Preparation
 
-```bash
-python3 src/verify_manifest.py --manifest data/manifests/train.jsonl
-python3 src/verify_manifest.py --manifest data/manifests/eval.jsonl
+Dataset definitions are controlled by YAML files in `configs/`. The balanced proposal setting uses:
+
+```text
+configs/datasets_proposal_balanced.yaml
 ```
 
-You can prepare one dataset at a time:
+Prepare local manifests and image caches:
 
 ```bash
-python3 src/prepare_datasets.py --datasets textvqa --train-limit 5 --eval-limit 5
+python src/prepare_datasets.py --config configs/datasets_proposal_balanced.yaml
 ```
 
-For proposal-aligned multi-dataset training, use:
+Check that each row has a readable image, prompt, and answer:
 
 ```bash
-python3 src/prepare_datasets.py --config configs/datasets_proposal_balanced.yaml --strict-datasets
-python3 src/verify_manifest.py --manifest data/manifests/train_proposal_balanced.jsonl
-python3 src/verify_manifest.py --manifest data/manifests/eval_proposal_balanced.jsonl
+python src/verify_manifest.py --data data/manifests/eval_proposal.jsonl
 ```
 
-## Run Fixed Baselines
+## MQT-LLaVA Backend
+
+The adapter in `src/mqt_llava_adapter.py` connects this project to a local MQT-LLaVA clone. The expected setup is:
 
 ```bash
-python3 src/evaluate_token_policy.py --data data/manifests/eval.jsonl --fixed-budget 8 --out results/fixed_8.jsonl
-python3 src/evaluate_token_policy.py --data data/manifests/eval.jsonl --fixed-budget 36 --prompt-style short --out results/fixed_36.jsonl
-python3 src/evaluate_token_policy.py --data data/manifests/eval.jsonl --fixed-budget 256 --prompt-style short --out results/fixed_256.jsonl
+git clone https://github.com/gordonhu608/MQT-LLaVA.git
 ```
 
-## Generate Oracle Labels
-
-Run the frozen MQT-LLaVA model at each candidate budget and choose the smallest sufficient budget.
+Set the backbone path before running inference:
 
 ```bash
-python3 src/oracle_labeling.py \
-  --data data/manifests/train.jsonl \
-  --out data/manifests/oracle_train_textvqa_small.jsonl \
-  --budgets 36 64 144 256 \
-  --score-key dataset_score \
-  --prompt-style short \
-  --limit 10
-```
-
-The oracle script appends one completed example at a time and resumes by default. If Colab disconnects, rerun the same command and it will skip existing `example_id`s already written to `--out`. Use `--no-resume` only when you intentionally want a fresh output file.
-
-## Extract Frozen Router Features (Recommended)
-
-```bash
-python3 src/extract_router_features.py \
-  --data data/manifests/oracle_train_textvqa_small.jsonl \
-  --out data/manifests/oracle_train_textvqa_small_with_features.jsonl \
-  --clip-model openai/clip-vit-large-patch14-336 \
-  --batch-size 16 \
-  --normalize
-```
-
-For router evaluation, also extract features for eval rows:
-
-```bash
-python3 src/extract_router_features.py \
-  --data data/manifests/eval.jsonl \
-  --out data/manifests/eval_with_features.jsonl \
-  --clip-model openai/clip-vit-large-patch14-336 \
-  --batch-size 16 \
-  --normalize
-```
-
-`src/train_router.py` automatically infers embedding dimensions from the labeled JSONL when `prompt_embedding` / `image_embedding` are present, so you do not need to manually edit `prompt_dim` and `image_dim` in `configs/router.yaml` for CLIP variants.
-
-## Train Routers
-
-Train proposal baselines:
-
-```bash
-KMP_DUPLICATE_LIB_OK=TRUE python3 src/train_router.py \
-  --labels data/manifests/oracle_train_with_features.jsonl \
-  --config configs/router_proposal_4budgets.yaml \
-  --mode prompt \
-  --out checkpoints/router_prompt.pt
-
-KMP_DUPLICATE_LIB_OK=TRUE python3 src/train_router.py \
-  --labels data/manifests/oracle_train_with_features.jsonl \
-  --config configs/router_proposal_4budgets.yaml \
-  --mode image \
-  --out checkpoints/router_image.pt
-
-KMP_DUPLICATE_LIB_OK=TRUE python3 src/train_router.py \
-  --labels data/manifests/oracle_train_with_features.jsonl \
-  --config configs/router_proposal_4budgets.yaml \
-  --mode multimodal \
-  --out checkpoints/router_multimodal.pt
-
-KMP_DUPLICATE_LIB_OK=TRUE python3 src/train_router.py \
-  --labels data/manifests/oracle_train_with_features.jsonl \
-  --config configs/router_proposal_4budgets.yaml \
-  --mode cross_attention \
-  --out checkpoints/router_cross_attention.pt
-```
-
-`KMP_DUPLICATE_LIB_OK=TRUE` is included because this local macOS environment currently reports an OpenMP duplicate-runtime issue when importing PyTorch.
-
-## Evaluate Learned Routing
-
-```bash
-KMP_DUPLICATE_LIB_OK=TRUE python3 src/evaluate_router.py \
-  --data data/manifests/eval_with_features.jsonl \
-  --checkpoint checkpoints/router_multimodal.pt \
-  --out results/router_multimodal.jsonl
-
-KMP_DUPLICATE_LIB_OK=TRUE python3 src/evaluate_router.py \
-  --data data/manifests/eval_with_features.jsonl \
-  --checkpoint checkpoints/router_cross_attention.pt \
-  --out results/router_cross_attention.jsonl
-```
-
-## Run Rule-Based Task Routing
-
-```bash
-python3 src/evaluate_token_policy.py \
-  --data data/manifests/eval.jsonl \
-  --policy configs/task_token_policy.yaml \
-  --out results/rule_task_aware.jsonl
-```
-
-## Model Adapter
-
-Point this project at your cloned MQT-LLaVA repository:
-
-```bash
-export MQT_LLAVA_REPO=/absolute/path/to/MQT-LLaVA
+export MQT_LLAVA_REPO=/path/to/MQT-LLaVA
 export MQT_LLAVA_MODEL_PATH=gordonhu/MQT-LLaVA-7b
+```
+
+For Colab or GPU runs, the persistent backend is recommended because it loads the model once and reuses it across examples:
+
+```bash
 export MQT_LLAVA_BACKEND=persistent
-export MQT_LLAVA_OFFLOAD_FOLDER=offload
+export MQT_LLAVA_OFFLOAD_FOLDER=/content/mqt_offload
 ```
 
-Then run any evaluation script from this project. The adapter in `src/mqt_llava_adapter.py` imports:
+## Fixed-Budget Evaluation
 
-```python
-from llava.eval.run_llava import eval_model
-```
-
-and passes our selected budget through the repo's official argument:
-
-```python
-num_visual_tokens=<budget>
-```
-
-Example:
+Fixed-budget runs provide the main baselines:
 
 ```bash
-MQT_LLAVA_REPO=/absolute/path/to/MQT-LLaVA \
-python3 src/evaluate_token_policy.py \
-  --data data/manifests/eval.jsonl \
-  --fixed-budget 36 \
-  --out results/fixed_36.jsonl
+python src/evaluate_token_policy.py \
+  --data data/manifests/eval_proposal_with_features.jsonl \
+  --fixed-budget 64 \
+  --out results/fixed_64.jsonl
 ```
 
-If you installed MQT-LLaVA into the active Python environment and do not want to pass a repo path, use:
+Each output row includes the original fields plus the model prediction, selected token budget, latency, and score fields.
+
+## Oracle Budget Labeling
+
+Oracle labeling runs each example at every candidate budget and selects the smallest budget that achieves the best available score.
 
 ```bash
-MQT_LLAVA_USE_INSTALLED=1 python3 src/evaluate_token_policy.py --data data/manifests/eval.jsonl --fixed-budget 36
+python src/oracle_labeling.py \
+  --data data/manifests/train_proposal_balanced.jsonl \
+  --out data/manifests/oracle_train_proposal.jsonl \
+  --budgets 36 64 144 256 \
+  --score-key dataset_score
 ```
 
-Depending on the repo, that argument may be named something like:
+The script is resumable. If an output file already contains labeled examples, existing `example_id` values are skipped.
 
-- `m`
-- `num_query_tokens`
-- `token_budget`
-- `visual_tokens`
+## Router Training
 
-For this repository's README, the relevant name is `num_visual_tokens`. Keep the outer evaluation code unchanged so all experiments are comparable.
+Router settings are controlled by:
 
-The default adapter uses a persistent loaded model so the 7B checkpoint is not reloaded for every example or budget. If you need to debug against the original MQT-LLaVA helper, set `MQT_LLAVA_BACKEND=eval`, but that path is too slow and fragile for oracle labeling.
+```text
+configs/router_proposal_4budgets.yaml
+```
 
-For local smoke tests before spending Colab GPU credits, you can use a lightweight backend:
+To train a router:
 
 ```bash
-export MQT_LLAVA_BACKEND=blip_vqa_smoke
-export AUTO_MQT_SMOKE_MODEL=Salesforce/blip-vqa-base
-export AUTO_MQT_SMOKE_DEVICE=auto
+python src/train_router.py \
+  --config configs/router_proposal_4budgets.yaml \
+  --mode image
 ```
 
-This backend is for pipeline validation only (it ignores `visual_tokens`), not final Auto-MQT accuracy/token trade-off reporting.
+Available modes:
 
-## Proposal Files
+- `prompt`: uses question features
+- `image`: uses image features
+- `multimodal`: combines prompt and image features
+- `cross_attention`: uses a small cross-attention router
 
-- `src/oracle_labeling.py`: Step 1, oracle budget labeling.
-- `src/prepare_datasets.py`: converts Hugging Face subsets into local JSONL manifests.
-- `src/verify_manifest.py`: validates manifest fields and saved images.
-- `src/router_model.py`: late-fusion MLP router for prompt-only, image-only, and multimodal ablations.
-- `src/train_router.py`: Step 2/3, router training with cost-aware loss.
-- `src/evaluate_router.py`: Step 4, adaptive inference policy with optional confidence fallback.
-- `src/evaluate_token_policy.py`: fixed-budget and rule-based baselines.
-- `src/extract_router_features.py`: frozen CLIP feature extraction for prompt/image embeddings.
-- `src/analyze_results.py`: report-friendly summary tables from result JSONL files.
-- `configs/router_proposal_4budgets.yaml`: tuned training settings for the 4-budget proposal setup.
-- `configs/datasets_proposal_balanced.yaml`: larger multi-dataset subset config for proposal-scale experiments.
+## Router Evaluation
+
+Evaluate a trained router:
+
+```bash
+python src/evaluate_router.py \
+  --data data/manifests/eval_proposal_with_features.jsonl \
+  --checkpoint results/router_image.pt \
+  --out results/router_image.jsonl
+```
+
+Router outputs can be compared against fixed-budget baselines using:
+
+```bash
+python src/report_dataset_breakdown.py
+```
+
+## Metrics
+
+The project reports:
+
+- `dataset_score`: dataset-aware accuracy score
+- `avg_visual_tokens`: average selected visual-token budget
+- `avg_latency_s`: average inference latency
+- `budget_regret`: extra tokens used relative to the oracle budget
+- `under_budget_rate`: fraction of examples where the router selected fewer tokens than the oracle budget
+
+## Final Experimental Setting
+
+The final reported experiment uses:
+
+- training examples: 2,000 total, 500 per dataset
+- evaluation examples: 600 total, 150 per dataset
+- datasets: VQAv2, GQA, TextVQA, ScienceQA-IMG
+- candidate budgets: `36`, `64`, `144`, `256`
+- backbone: frozen MQT-LLaVA-7B
+
